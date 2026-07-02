@@ -7,30 +7,33 @@ swap these values rather than chase hardcoded strings through QSS.
 """
 from __future__ import annotations
 
-# ---- Accent palette (Material You-inspired violet) ----
-ACCENT = "#7C5CFF"
-ACCENT_BRIGHT = "#9D7FFF"
-ACCENT_PRESSED = "#6A4DE0"
+# ---- Accent palette (Nordic Forest Muted Steel Blue) ----
+ACCENT = "#5A8F9E"
+ACCENT_BRIGHT = "#71A5B5"
+ACCENT_PRESSED = "#437482"
+ACCENT_TEXT = "white"
 
-# ---- HUD (dark floating overlay) ----
+# ---- HUD (Nordic Forest dark overlay) ----
 # Gradient stops as (R, G, B) tuples; caller applies alpha.
-HUD_BG_TOP = (18, 18, 28)
-HUD_GLASS_HIGHLIGHT = (40, 40, 56)  # subtle top-edge light band
-HUD_BG_BOTTOM = (28, 28, 40)
-HUD_BORDER = "rgba(255, 255, 255, 32)"
-HUD_TEXT_PRIMARY = "white"
-HUD_TEXT_SECONDARY = "rgba(255, 255, 255, 180)"
-HUD_TEXT_TERTIARY = "rgba(255, 255, 255, 90)"
-HUD_INPUT_TEXT = "rgba(255, 255, 255, 170)"
+HUD_BG_TOP = (30, 37, 48)              # #1E2530
+HUD_GLASS_HIGHLIGHT = (40, 48, 61)     # subtle top-edge highlight stop
+HUD_BG_BOTTOM = (24, 29, 38)           # #181D26
+HUD_BORDER = "rgba(138, 149, 165, 50)" # soft slate gray border
+HUD_TEXT_PRIMARY = "#EAECEF"
+HUD_TEXT_COLOR_RGB = (234, 236, 239)
+HUD_TEXT_SECONDARY = "rgba(138, 149, 165, 220)"
+HUD_TEXT_TERTIARY = "rgba(138, 149, 165, 140)"
+HUD_INPUT_TEXT = "rgba(138, 149, 165, 180)"
 HUD_INPUT_ITALIC = True
-HUD_DIVIDER = "rgba(255, 255, 255, 28)"
+HUD_DIVIDER = "rgba(138, 149, 165, 45)"
+HUD_SHADOW_COLOR = (15, 18, 24, 180)    # soft, dark shadow for dark palette
 
-# Button surface alphas (rgba white on dark)
-HUD_BTN_BG = "rgba(255, 255, 255, 26)"
-HUD_BTN_BG_HOVER = "rgba(255, 255, 255, 56)"
-HUD_BTN_BG_PRESSED = "rgba(255, 255, 255, 18)"
-HUD_BTN_BORDER = "rgba(255, 255, 255, 50)"
-HUD_BTN_BORDER_HOVER = "rgba(255, 255, 255, 140)"
+# Button surface (glassmorphic muted buttons)
+HUD_BTN_BG = "rgba(255, 255, 255, 20)"
+HUD_BTN_BG_HOVER = "rgba(255, 255, 255, 40)"
+HUD_BTN_BG_PRESSED = "rgba(255, 255, 255, 12)"
+HUD_BTN_BORDER = "rgba(138, 149, 165, 50)"
+HUD_BTN_BORDER_HOVER = "rgba(138, 149, 165, 120)"
 
 # ---- Settings dialog (light theme) ----
 SETTINGS_BG = "#F4F5F8"

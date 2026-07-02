@@ -34,6 +34,7 @@ from theme import (
     ACCENT,
     ACCENT_BRIGHT as ACCENT_HOVER,
     ACCENT_PRESSED,
+    ACCENT_TEXT,
     COLOR_ERROR,
     COLOR_SUCCESS,
     FONT_FAMILY_QSS,
@@ -76,7 +77,7 @@ QLineEdit, QComboBox, QTextEdit {{
     border-radius: {RADIUS_INPUT}px;
     padding: 6px 10px;
     selection-background-color: {ACCENT};
-    selection-color: white;
+    selection-color: {ACCENT_TEXT};
     font-size: 13px;
 }}
 QLineEdit:focus, QComboBox:focus, QTextEdit:focus {{
@@ -100,7 +101,7 @@ QComboBox QAbstractItemView {{
     border: 1px solid {SETTINGS_INPUT_BORDER};
     border-radius: 6px;
     selection-background-color: {ACCENT};
-    selection-color: white;
+    selection-color: {ACCENT_TEXT};
     outline: none;
     padding: 4px;
 }}

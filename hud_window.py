@@ -42,6 +42,7 @@ from theme import (
     ACCENT,
     ACCENT_BRIGHT,
     ACCENT_PRESSED,
+    ACCENT_TEXT,
     ANIM_FAST,
     ANIM_PULSE,
     ANIM_SLOW,
@@ -58,8 +59,11 @@ from theme import (
     HUD_DIVIDER,
     HUD_GLASS_HIGHLIGHT,
     HUD_INPUT_TEXT,
+    HUD_TEXT_PRIMARY,
+    HUD_TEXT_COLOR_RGB,
     HUD_TEXT_SECONDARY,
     HUD_TEXT_TERTIARY,
+    HUD_SHADOW_COLOR,
     RADIUS_BADGE,
     RADIUS_BUTTON,
     RADIUS_CARD_HUD,
@@ -198,7 +202,8 @@ class _FadingLabel(QLabel):
 
     def _apply_alpha(self) -> None:
         a255 = int(self._alpha * self._base_alpha)
-        self.setStyleSheet(f"color: rgba(255, 255, 255, {a255});")
+        r, g, b = HUD_TEXT_COLOR_RGB
+        self.setStyleSheet(f"color: rgba({r}, {g}, {b}, {a255});")
 
 
 class HUDWindow(QWidget):
@@ -233,22 +238,21 @@ class HUDWindow(QWidget):
             | Qt.Tool
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
-        # Real drop shadow around the floating panel
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(36)
-        shadow.setColor(QColor(0, 0, 0, 200))
-        shadow.setOffset(0, 8)
-        self.setGraphicsEffect(shadow)
-
         # Root container: the visible "card". Child QFrame so we can round
         # its corners + paint a gradient background independently from the
-        # (transparent) top-level widget. The card fills the HUD entirely;
-        # the four corner grips are positioned absolutely on top of it.
+        # (transparent) top-level widget.
         self._card = QFrame(self)
         self._card.setObjectName("card")
 
+        # Real drop shadow around the floating panel (applied to card to avoid black border clipping)
+        shadow = QGraphicsDropShadowEffect(self._card)
+        shadow.setBlurRadius(24)
+        shadow.setColor(QColor(*HUD_SHADOW_COLOR))
+        shadow.setOffset(0, 4)
+        self._card.setGraphicsEffect(shadow)
+
         root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
+        root.setContentsMargins(16, 16, 16, 16)  # padding for shadow
         root.setSpacing(0)
         root.addWidget(self._card)
 
@@ -289,6 +293,7 @@ class HUDWindow(QWidget):
         header.addWidget(self.drops_label)
         self.lang_badge = QLabel()
         self.lang_badge.setObjectName("badgeTranslated")
+        self.lang_badge.setVisible(False)
         header.addWidget(self.lang_badge)
         self.drag_hint = _FadingLabel(tr("hud.drag_hint"), base_alpha=90)
         self.drag_hint.setObjectName("dragHint")
@@ -366,7 +371,7 @@ class HUDWindow(QWidget):
         self._refresh_timer.setInterval(REFRESH_THROTTLE_MS)
         self._refresh_timer.timeout.connect(self._do_refresh)
 
-        self.resize(720, 260)
+        self.resize(752, 292)
         # Keep captions readable, but allow narrower HUDs on small/portrait
         # screens instead of forcing a fixed desktop-width minimum everywhere.
         self._apply_screen_aware_widths()
@@ -382,10 +387,11 @@ class HUDWindow(QWidget):
         sz = RESIZE_GRIP_SIZE
         w = self.width()
         h = self.height()
-        self._grips[0].setGeometry(0, 0, sz, sz)  # top-left
-        self._grips[1].setGeometry(w - sz, 0, sz, sz)  # top-right
-        self._grips[2].setGeometry(0, h - sz, sz, sz)  # bottom-left
-        self._grips[3].setGeometry(w - sz, h - sz, sz, sz)  # bottom-right
+        m = 16  # Root layout margins (transparent border padding)
+        self._grips[0].setGeometry(m, m, sz, sz)  # top-left
+        self._grips[1].setGeometry(w - m - sz, m, sz, sz)  # top-right
+        self._grips[2].setGeometry(m, h - m - sz, sz, sz)  # bottom-left
+        self._grips[3].setGeometry(w - m - sz, h - m - sz, sz, sz)  # bottom-right
         for g in self._grips:
             g.raise_()
 
@@ -494,7 +500,7 @@ class HUDWindow(QWidget):
             font-family: {FONT_FAMILY_QSS};
         }}
         QLabel {{
-            color: white;
+            color: {HUD_TEXT_PRIMARY};
             background: transparent;
         }}
         QLabel#statusText {{ color: {HUD_TEXT_SECONDARY}; font-size: 11px; }}
@@ -509,7 +515,7 @@ class HUDWindow(QWidget):
         }}
         QLabel#badgeTranslated {{
             background: {ACCENT};
-            color: white;
+            color: {ACCENT_TEXT};
             border-radius: {RADIUS_BADGE}px;
             padding: 2px 10px;
             font-size: 11px;
@@ -517,7 +523,7 @@ class HUDWindow(QWidget):
         }}
         QPlainTextEdit {{
             background: transparent;
-            color: white;
+            color: {HUD_TEXT_PRIMARY};
             border: none;
             padding: 0;
         }}
@@ -533,7 +539,7 @@ class HUDWindow(QWidget):
         QWidget#controlBar {{ background: transparent; }}
         QPushButton {{
             background: {HUD_BTN_BG};
-            color: white;
+            color: {HUD_TEXT_PRIMARY};
             border: 1px solid {HUD_BTN_BORDER};
             border-radius: {RADIUS_BUTTON}px;
             padding: 6px 16px;
@@ -551,7 +557,7 @@ class HUDWindow(QWidget):
         QPushButton#primaryBtn {{
             background: {ACCENT};
             border: 1px solid {ACCENT};
-            color: white;
+            color: {ACCENT_TEXT};
             font-weight: 600;
         }}
         QPushButton#primaryBtn:hover {{
@@ -564,17 +570,18 @@ class HUDWindow(QWidget):
             padding: 7px 16px 5px 16px;
         }}
         QPushButton#iconBtn {{
-            background: rgba(255, 255, 255, 20);
+            background: {HUD_BTN_BG};
             border: 1px solid {HUD_BTN_BORDER};
             padding: 0;
             font-size: 16px;
+            color: {HUD_TEXT_PRIMARY};
         }}
         QPushButton#iconBtn:pressed {{
             padding: 1px 0 0 0;
         }}
         QSizeGrip {{ background: transparent; }}
         QSizeGrip:hover {{
-            background: rgba(255, 255, 255, 30);
+            background: rgba(138, 149, 165, 50);
             border-radius: 4px;
         }}
         """
@@ -613,6 +620,7 @@ class HUDWindow(QWidget):
             + in_visible_h
             + CONTROL_BAR_HEIGHT
             + spacing_v
+            + 32  # Root layout margins (16px top + 16px bottom)
         )
 
     def set_output(self, text: str) -> None:
@@ -719,7 +727,7 @@ class HUDWindow(QWidget):
         max_min = max(HUD_COMPACT_MIN_WIDTH, screen_width - SCREEN_MARGIN * 2)
         hud_min = min(HUD_IDEAL_MIN_WIDTH, max_min)
         caption_min = min(CAPTION_IDEAL_MIN_WIDTH, max(CAPTION_COMPACT_MIN_WIDTH, hud_min - 140))
-        self.setMinimumWidth(hud_min)
+        self.setMinimumWidth(hud_min + 32)
         for edit in (getattr(self, "output_edit", None), getattr(self, "input_edit", None)):
             if edit is not None:
                 edit.setMinimumWidth(caption_min)

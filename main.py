@@ -29,6 +29,7 @@ from settings import AppSettings
 from settings_window import DIALOG_QSS, SettingsDialog
 from theme import (
     ACCENT,
+    ACCENT_TEXT,
     RADIUS_INPUT,
     SETTINGS_BG,
     SETTINGS_CARD_BG,
@@ -55,7 +56,7 @@ QMenu::item {{
 }}
 QMenu::item:selected {{
     background: {ACCENT};
-    color: white;
+    color: {ACCENT_TEXT};
 }}
 QMenu::separator {{
     height: 1px;
