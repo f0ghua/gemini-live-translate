@@ -8,10 +8,12 @@ venv/
 env/
 .python-version
 
-# PyInstaller build artifacts
+# PyInstaller / Nuitka build artifacts
 build/
 dist/
 *.spec
+*.build/
+*.dist/
 
 # Logs / temp output from diagnostic scripts
 *.out

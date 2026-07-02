@@ -18,8 +18,9 @@ permissions:
 
 jobs:
   build:
-    name: Build Executable
+    name: Build Executable (Nuitka)
     runs-on: windows-latest
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
@@ -31,7 +32,17 @@ jobs:
         run: |
           version="${{ inputs.version }}"
           echo "tag=${version}" >> "$GITHUB_OUTPUT"
-          echo "name=${version#v}" >> "$GITHUB_OUTPUT"
+          # Strip leading 'v' for release name
+          name="${version#v}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          # Convert to X.Y.Z.W for Nuitka file-version
+          nuitka_version="${name}"
+          dots=$(echo "$nuitka_version" | tr -cd '.' | wc -c)
+          while [ "$dots" -lt 3 ]; do
+            nuitka_version="${nuitka_version}.0"
+            dots=$((dots + 1))
+          done
+          echo "nuitka_version=${nuitka_version}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,51 +50,76 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: Cache Nuitka compiler
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka
+          key: nuitka-compiler-${{ runner.os }}-v1
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install nuitka
 
-      - name: Build with PyInstaller
+      - name: Build with Nuitka
         shell: cmd
+        env:
+          NUITKA_CACHE_DIR: ${{ runner.temp }}\nuitka-cache
         run: |
-          pyinstaller --noconsole --onefile --noupx --name gemini-live-translate ^
-            --collect-all PySide6 ^
-            --collect-all pyaudiowpatch ^
-            --collect-all numpy ^
-            --collect-all scipy ^
-            --hidden-import scipy.special._cdflib ^
-            --exclude-module PySide6.QtSql ^
-            --exclude-module PySide6.QtQml ^
-            --exclude-module PySide6.QtQuick ^
-            --exclude-module PySide6.QtQuick3D ^
-            --exclude-module PySide6.QtQuickWidgets ^
-            --exclude-module PySide6.QtCharts ^
-            --exclude-module PySide6.QtDataVisualization ^
-            --exclude-module PySide6.QtWebEngineCore ^
-            --exclude-module PySide6.QtWebEngineWidgets ^
-            --exclude-module PySide6.QtWebChannel ^
-            --exclude-module PySide6.QtMultimedia ^
-            --exclude-module PySide6.QtPdf ^
-            --exclude-module PySide6.QtPdfWidgets ^
-            --exclude-module PySide6.QtPrintSupport ^
-            --exclude-module PySide6.QtSvg ^
-            --exclude-module PySide6.QtSvgWidgets ^
-            --exclude-module PySide6.QtTest ^
-            --exclude-module PySide6.QtOpenGL ^
-            --exclude-module PySide6.QtOpenGLWidgets ^
-            --exclude-module PySide6.QtBluetooth ^
-            --exclude-module PySide6.QtSerialPort ^
-            --exclude-module PySide6.QtSensors ^
-            --exclude-module PySide6.QtPositioning ^
-            --exclude-module PySide6.QtNfc ^
-            --exclude-module PySide6.QtRemoteObjects ^
-            --exclude-module PySide6.QtScxml ^
-            --exclude-module PySide6.QtStateMachine ^
-            --exclude-module PySide6.QtUiTools ^
-            --exclude-module PySide6.QtWebSockets ^
-            --exclude-module PySide6.QtHttpServer ^
+          if not exist "%NUITKA_CACHE_DIR%" mkdir "%NUITKA_CACHE_DIR%"
+          python -m nuitka ^
+            --onefile ^
+            --windows-console-mode=disable ^
+            --enable-plugins=pyside6 ^
+            --include-package=pyaudiowpatch ^
+            --include-package=numpy ^
+            --include-package=scipy ^
+            --include-package=websockets ^
+            --include-package-data=pyaudiowpatch ^
+            --nofollow-import-to=PySide6.QtQml ^
+            --nofollow-import-to=PySide6.QtQuick ^
+            --nofollow-import-to=PySide6.QtQuick3D ^
+            --nofollow-import-to=PySide6.QtQuickWidgets ^
+            --nofollow-import-to=PySide6.QtCharts ^
+            --nofollow-import-to=PySide6.QtDataVisualization ^
+            --nofollow-import-to=PySide6.QtWebEngineCore ^
+            --nofollow-import-to=PySide6.QtWebEngineWidgets ^
+            --nofollow-import-to=PySide6.QtWebChannel ^
+            --nofollow-import-to=PySide6.QtMultimedia ^
+            --nofollow-import-to=PySide6.QtPdf ^
+            --nofollow-import-to=PySide6.QtPdfWidgets ^
+            --nofollow-import-to=PySide6.QtPrintSupport ^
+            --nofollow-import-to=PySide6.QtSvg ^
+            --nofollow-import-to=PySide6.QtSvgWidgets ^
+            --nofollow-import-to=PySide6.QtTest ^
+            --nofollow-import-to=PySide6.QtOpenGL ^
+            --nofollow-import-to=PySide6.QtOpenGLWidgets ^
+            --nofollow-import-to=PySide6.QtBluetooth ^
+            --nofollow-import-to=PySide6.QtSerialPort ^
+            --nofollow-import-to=PySide6.QtSensors ^
+            --nofollow-import-to=PySide6.QtPositioning ^
+            --nofollow-import-to=PySide6.QtNfc ^
+            --nofollow-import-to=PySide6.QtRemoteObjects ^
+            --nofollow-import-to=PySide6.QtScxml ^
+            --nofollow-import-to=PySide6.QtStateMachine ^
+            --nofollow-import-to=PySide6.QtUiTools ^
+            --nofollow-import-to=PySide6.QtWebSockets ^
+            --nofollow-import-to=PySide6.QtHttpServer ^
+            --output-dir=dist ^
+            --output-filename=gemini-live-translate.exe ^
+            --onefile-tempdir-spec={CACHE_DIR}/GeminiLiveTranslate ^
+            --onefile-cache-mode=cached ^
+            --company-name=GeminiLiveTranslate ^
+            --product-name="Gemini Live Translate" ^
+            --file-version=${{ steps.version.outputs.nuitka_version }} ^
+            --product-version=${{ steps.version.outputs.nuitka_version }} ^
+            --assume-yes-for-downloads ^
+            --lto=yes ^
+            --static-libpython=yes ^
+            --python-flag=-O ^
+            --python-flag=no_docstrings ^
+            --python-flag=no_warnings ^
             main.py
 
       - name: Prepare release files
@@ -91,7 +127,7 @@ jobs:
         run: |
           mkdir -p publish
           if [ -f "dist/gemini-live-translate.exe" ]; then
-            cp dist/gemini-live-translate.exe publish/gemini-live-translate-${{ inputs.version }}.exe
+            cp dist/gemini-live-translate.exe publish/gemini-live-translate-${{ steps.version.outputs.name }}.exe
           else
             echo "Error: dist/gemini-live-translate.exe not found!"
             exit 1
@@ -100,8 +136,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gemini-live-translate-windows-${{ inputs.version }}
-          path: publish/gemini-live-translate-${{ inputs.version }}.exe
+          name: gemini-live-translate-windows-${{ steps.version.outputs.name }}
+          path: publish/gemini-live-translate-${{ steps.version.outputs.name }}.exe
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -110,5 +146,5 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Gemini Live Translate ${{ inputs.version }}
-          files: publish/gemini-live-translate-${{ inputs.version }}.exe
+          files: publish/gemini-live-translate-${{ steps.version.outputs.name }}.exe
           generate_release_notes: true
