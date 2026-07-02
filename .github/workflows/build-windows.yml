@@ -85,8 +85,8 @@ jobs:
       - name: Cache Nuitka compiler
         uses: actions/cache@v4
         with:
-          path: ~\AppData\Local\Nuitka\Nuitka
-          key: nuitka-compiler-${{ runner.os }}-v1
+          path: ~\AppData\Local\Nuitka
+          key: nuitka-compiler-${{ runner.os }}-v2
 
       - name: Install dependencies
         run: |
