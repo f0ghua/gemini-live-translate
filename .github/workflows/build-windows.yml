@@ -49,53 +49,11 @@ jobs:
           done
           echo "nuitka_version=${nuitka_version}" >> "$GITHUB_OUTPUT"
 
-      - name: Install Python 3.11 from python.org (with dev files for static libpython)
-        shell: pwsh
-        run: |
-          # actions/setup-python uses a minimal nuget package without libs/
-          # Install from python.org with Include_dev=1 to get libs/python311.lib
-          # which Nuitka needs for --static-libpython=yes
-          $url = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
-          Write-Host "Downloading Python 3.11.9 from python.org..."
-          Invoke-WebRequest -Uri $url -OutFile python-installer.exe
-
-          Write-Host "Installing Python with development files..."
-          $pythonPath = "C:\Python311"
-          $proc = Start-Process -FilePath ".\python-installer.exe" -ArgumentList "/quiet", "InstallAllUsers=0", "TargetDir=$pythonPath", "PrependPath=1", "Include_lib=1", "Include_dev=1", "Include_pip=1", "Include_tcltk=0", "Include_test=0", "Include_tools=0", "Include_launcher=0", "Include_doc=0" -Wait -PassThru
-          Write-Host "Installer exit code: $($proc.ExitCode)"
-          Remove-Item python-installer.exe
-
-          if (-not (Test-Path "$pythonPath\python.exe")) {
-            Write-Host "Python not at expected path, searching..."
-            $found = Get-ChildItem -Path "C:\Users", "C:\Program Files", "C:\" -Filter "python.exe" -Recurse -ErrorAction SilentlyContinue -Depth 5 | Where-Object { $_.FullName -match "Python311" } | Select-Object -First 1
-            if ($found) {
-              $pythonPath = $found.DirectoryName
-              Write-Host "Found Python at: $pythonPath"
-            } else {
-              Write-Host "ERROR: Python installation not found!"
-              exit 1
-            }
-          }
-
-          echo "$pythonPath" >> $env:GITHUB_PATH
-          echo "$pythonPath\Scripts" >> $env:GITHUB_PATH
-
-          # Verify
-          & "$pythonPath\python.exe" --version
-          $libFile = Get-ChildItem "$pythonPath\libs\python*.lib" -ErrorAction SilentlyContinue
-          if ($libFile) {
-            Write-Host "Found static libpython: $($libFile.FullName)"
-          } else {
-            Write-Host "ERROR: Static libpython NOT found at $pythonPath\libs\"
-            Get-ChildItem $pythonPath -ErrorAction SilentlyContinue
-            exit 1
-          }
-
-      - name: Cache pip
-        uses: actions/cache@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          path: ~\AppData\Local\pip\Cache
-          key: ${{ runner.os }}-pip-3.11-${{ hashFiles('requirements.txt') }}
+          python-version: '3.11'
+          cache: 'pip'
 
       - name: Cache Nuitka compiler
         uses: actions/cache@v4
@@ -163,7 +121,6 @@ jobs:
             --product-version=${{ steps.version.outputs.nuitka_version }} ^
             --assume-yes-for-downloads ^
             --lto=yes ^
-            --static-libpython=yes ^
             --python-flag=-O ^
             --python-flag=no_docstrings ^
             --python-flag=no_warnings ^
