@@ -49,41 +49,38 @@ jobs:
           done
           echo "nuitka_version=${nuitka_version}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Python development libraries (for static libpython)
+      - name: Install Python 3.11 from python.org (with dev files for static libpython)
         shell: pwsh
         run: |
-          $pythonLoc = (Get-Command python).Source | Split-Path
-          $libsDir = Join-Path $pythonLoc "libs"
-          if (Test-Path "$libsDir\python*.lib") {
-            Write-Host "libs/ already exists, skipping"
-            Get-ChildItem $libsDir
-            exit 0
-          }
           # actions/setup-python uses a minimal nuget package without libs/
-          # Download the full nuget package to get python3XX.lib (static libpython)
-          $pyVersion = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
-          Write-Host "Python version: $pyVersion"
-          $nugetUrl = "https://www.nuget.org/api/v2/package/python/$pyVersion"
-          Write-Host "Downloading from: $nugetUrl"
-          Invoke-WebRequest -Uri $nugetUrl -OutFile python-pkg.zip
-          $tempDir = New-Item -ItemType Directory -Force -Path "$env:TEMP\python-nuget"
-          Expand-Archive python-pkg.zip -DestinationPath $tempDir -Force
-          if (Test-Path "$tempDir\tools\libs") {
-            New-Item -ItemType Directory -Force -Path $libsDir | Out-Null
-            Copy-Item "$tempDir\tools\libs\*" $libsDir -Recurse -Force
-            Write-Host "Copied libs/ to $libsDir"
-            Get-ChildItem $libsDir
+          # Install from python.org with Include_dev=1 to get libs/python311.lib
+          # which Nuitka needs for --static-libpython=yes
+          $url = "https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
+          Write-Host "Downloading Python 3.11.9 from python.org..."
+          Invoke-WebRequest -Uri $url -OutFile python-installer.exe
+          Write-Host "Installing Python with development files..."
+          Start-Process -FilePath python-installer.exe -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1", "Include_lib=1", "Include_dev=1", "Include_pip=1", "Include_tcltk=0", "Include_test=0", "Include_tools=0", "Include_launcher=0", "Include_doc=0" -Wait
+          Remove-Item python-installer.exe
+
+          $pythonPath = "C:\Program Files\Python311"
+          echo "$pythonPath" >> $env:GITHUB_PATH
+          echo "$pythonPath\Scripts" >> $env:GITHUB_PATH
+
+          # Verify
+          & "$pythonPath\python.exe" --version
+          $libFile = Get-ChildItem "$pythonPath\libs\python*.lib" -ErrorAction SilentlyContinue
+          if ($libFile) {
+            Write-Host "Found static libpython: $($libFile.FullName)"
           } else {
-            Write-Host "ERROR: libs/ not found in nuget package"
-            Get-ChildItem $tempDir\tools -Recurse -Depth 1
+            Write-Host "ERROR: Static libpython NOT found at $pythonPath\libs\"
             exit 1
           }
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-3.11-${{ hashFiles('requirements.txt') }}
 
       - name: Cache Nuitka compiler
         uses: actions/cache@v4
