@@ -55,6 +55,36 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      - name: Install Python development libraries (for static libpython)
+        shell: pwsh
+        run: |
+          $pythonLoc = (Get-Command python).Source | Split-Path
+          $libsDir = Join-Path $pythonLoc "libs"
+          if (Test-Path "$libsDir\python*.lib") {
+            Write-Host "libs/ already exists, skipping"
+            Get-ChildItem $libsDir
+            exit 0
+          }
+          # actions/setup-python uses a minimal nuget package without libs/
+          # Download the full nuget package to get python3XX.lib (static libpython)
+          $pyVersion = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+          Write-Host "Python version: $pyVersion"
+          $nugetUrl = "https://www.nuget.org/api/v2/package/python/$pyVersion"
+          Write-Host "Downloading from: $nugetUrl"
+          Invoke-WebRequest -Uri $nugetUrl -OutFile python-pkg.zip
+          $tempDir = New-Item -ItemType Directory -Force -Path "$env:TEMP\python-nuget"
+          Expand-Archive python-pkg.zip -DestinationPath $tempDir -Force
+          if (Test-Path "$tempDir\tools\libs") {
+            New-Item -ItemType Directory -Force -Path $libsDir | Out-Null
+            Copy-Item "$tempDir\tools\libs\*" $libsDir -Recurse -Force
+            Write-Host "Copied libs/ to $libsDir"
+            Get-ChildItem $libsDir
+          } else {
+            Write-Host "ERROR: libs/ not found in nuget package"
+            Get-ChildItem $tempDir\tools -Recurse -Depth 1
+            exit 1
+          }
+
       - name: Cache Nuitka compiler
         uses: actions/cache@v4
         with:
@@ -121,6 +151,7 @@ jobs:
             --product-version=${{ steps.version.outputs.nuitka_version }} ^
             --assume-yes-for-downloads ^
             --lto=yes ^
+            --static-libpython=yes ^
             --python-flag=-O ^
             --python-flag=no_docstrings ^
             --python-flag=no_warnings ^
