@@ -12,6 +12,11 @@ on:
         required: true
         type: boolean
         default: true
+      release_description:
+        description: 'Release 描述 (可选，留空则自动从 commits 生成)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -147,4 +152,5 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Gemini Live Translate ${{ inputs.version }}
           files: publish/gemini-live-translate-${{ steps.version.outputs.name }}.exe
-          generate_release_notes: true
+          body: ${{ inputs.release_description }}
+          generate_release_notes: ${{ inputs.release_description == '' }}
