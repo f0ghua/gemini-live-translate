@@ -1,0 +1,114 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (必填，例如: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      create_release:
+        description: '创建 GitHub Release'
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Executable
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          echo "tag=${version}" >> "$GITHUB_OUTPUT"
+          echo "name=${version#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        shell: cmd
+        run: |
+          pyinstaller --noconsole --onefile --noupx --name gemini-live-translate ^
+            --collect-all PySide6 ^
+            --collect-all pyaudiowpatch ^
+            --collect-all numpy ^
+            --collect-all scipy ^
+            --hidden-import scipy.special._cdflib ^
+            --exclude-module PySide6.QtSql ^
+            --exclude-module PySide6.QtQml ^
+            --exclude-module PySide6.QtQuick ^
+            --exclude-module PySide6.QtQuick3D ^
+            --exclude-module PySide6.QtQuickWidgets ^
+            --exclude-module PySide6.QtCharts ^
+            --exclude-module PySide6.QtDataVisualization ^
+            --exclude-module PySide6.QtWebEngineCore ^
+            --exclude-module PySide6.QtWebEngineWidgets ^
+            --exclude-module PySide6.QtWebChannel ^
+            --exclude-module PySide6.QtMultimedia ^
+            --exclude-module PySide6.QtPdf ^
+            --exclude-module PySide6.QtPdfWidgets ^
+            --exclude-module PySide6.QtPrintSupport ^
+            --exclude-module PySide6.QtSvg ^
+            --exclude-module PySide6.QtSvgWidgets ^
+            --exclude-module PySide6.QtTest ^
+            --exclude-module PySide6.QtOpenGL ^
+            --exclude-module PySide6.QtOpenGLWidgets ^
+            --exclude-module PySide6.QtBluetooth ^
+            --exclude-module PySide6.QtSerialPort ^
+            --exclude-module PySide6.QtSensors ^
+            --exclude-module PySide6.QtPositioning ^
+            --exclude-module PySide6.QtNfc ^
+            --exclude-module PySide6.QtRemoteObjects ^
+            --exclude-module PySide6.QtScxml ^
+            --exclude-module PySide6.QtStateMachine ^
+            --exclude-module PySide6.QtUiTools ^
+            --exclude-module PySide6.QtWebSockets ^
+            --exclude-module PySide6.QtHttpServer ^
+            main.py
+
+      - name: Prepare release files
+        shell: bash
+        run: |
+          mkdir -p publish
+          if [ -f "dist/gemini-live-translate.exe" ]; then
+            cp dist/gemini-live-translate.exe publish/gemini-live-translate-${{ inputs.version }}.exe
+          else
+            echo "Error: dist/gemini-live-translate.exe not found!"
+            exit 1
+          fi
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-live-translate-windows-${{ inputs.version }}
+          path: publish/gemini-live-translate-${{ inputs.version }}.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: ${{ inputs.create_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Gemini Live Translate ${{ inputs.version }}
+          files: publish/gemini-live-translate-${{ inputs.version }}.exe
+          generate_release_notes: true
