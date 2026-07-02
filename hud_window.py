@@ -629,9 +629,11 @@ class HUDWindow(QWidget):
         if self._out_draft and text.startswith(self._out_draft):
             self._out_draft = text
         else:
-            # new utterance started
+            # new utterance started: append directly (no separator) so text
+            # flows in a single paragraph and wraps at the viewport width
+            # instead of starting a new line per utterance.
             if self._out_draft:
-                self._out_committed = (self._out_committed + "\n" + self._out_draft).lstrip("\n")
+                self._out_committed = (self._out_committed + self._out_draft).strip()
                 if len(self._out_committed) > 1500:
                     self._out_committed = self._out_committed[-1500:]
             self._out_draft = text
@@ -643,7 +645,7 @@ class HUDWindow(QWidget):
             self._in_draft = text
         else:
             if self._in_draft:
-                self._in_committed = (self._in_committed + "\n" + self._in_draft).lstrip("\n")
+                self._in_committed = (self._in_committed + self._in_draft).strip()
                 if len(self._in_committed) > 800:
                     self._in_committed = self._in_committed[-800:]
             self._in_draft = text
@@ -756,7 +758,7 @@ class HUDWindow(QWidget):
     def _do_refresh(self) -> None:
         out_text = self._out_committed
         if self._out_draft:
-            out_text = (out_text + "\n" + self._out_draft).strip("\n")
+            out_text = (out_text + self._out_draft).strip()
         out_text = out_text if out_text else tr("hud.empty")
         # Only touch the editor when the text actually changed; setPlainText
         # resets the cursor and scrolls, which causes the visible "jitter" on
@@ -767,7 +769,7 @@ class HUDWindow(QWidget):
 
         in_text = self._in_committed
         if self._in_draft:
-            in_text = (in_text + "\n" + self._in_draft).strip("\n")
+            in_text = (in_text + self._in_draft).strip()
         if self.input_edit.toPlainText() != in_text:
             self.input_edit.setPlainText(in_text)
             self._scroll_to_end(self.input_edit)
