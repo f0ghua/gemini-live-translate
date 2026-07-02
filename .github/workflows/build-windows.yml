@@ -121,7 +121,6 @@ jobs:
             --product-version=${{ steps.version.outputs.nuitka_version }} ^
             --assume-yes-for-downloads ^
             --lto=yes ^
-            --static-libpython=yes ^
             --python-flag=-O ^
             --python-flag=no_docstrings ^
             --python-flag=no_warnings ^
