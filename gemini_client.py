@@ -18,7 +18,7 @@ import websockets
 from PySide6.QtCore import QObject, Signal
 
 from i18n import tr
-from settings import DEFAULT_API_BASE, DEFAULT_GEMINI_MODEL
+from settings import DEFAULT_API_BASE, DEFAULT_GEMINI_MODEL, DEFAULT_PROXY_URL
 
 # WebSocket path appended to the (scheme-swapped) API base.
 GEMINI_WS_PATH = (
@@ -43,6 +43,21 @@ KIND_WARNING = "warning"
 KIND_INFO = "info"
 
 
+def normalize_proxy_url(proxy_url: str) -> str:
+    """Normalize user-entered proxy strings for websockets.connect().
+
+    Empty disables proxy use. Host:port defaults to HTTP because local proxy
+    tools commonly expose an HTTP CONNECT listener on that form. Explicit
+    schemes such as socks5://127.0.0.1:2802 are preserved.
+    """
+    value = (proxy_url or "").strip()
+    if not value:
+        return ""
+    if "://" not in value:
+        return f"http://{value}"
+    return value
+
+
 class GeminiClient(QObject):
     # UI-facing signals (emitted from the asyncio thread; Qt cross-thread safe).
     # status: (session_id, kind, message)  — kind is one of KIND_* above,
@@ -62,6 +77,7 @@ class GeminiClient(QObject):
         self._thread: Optional[threading.Thread] = None
         self._api_key = ""
         self._api_base = DEFAULT_API_BASE
+        self._proxy_url = DEFAULT_PROXY_URL
         self._target_lang = "es"
         self._system_prompt = ""
         self._echo = False
@@ -87,9 +103,11 @@ class GeminiClient(QObject):
         echo_target_language: bool,
         api_base: str = DEFAULT_API_BASE,
         model: str = DEFAULT_GEMINI_MODEL,
+        proxy_url: str = DEFAULT_PROXY_URL,
     ) -> None:
         self._api_key = api_key.strip()
         self._api_base = (api_base or DEFAULT_API_BASE).strip()
+        self._proxy_url = normalize_proxy_url(proxy_url)
         self._target_lang = target_lang
         self._system_prompt = system_prompt
         self._echo = echo_target_language
@@ -109,6 +127,13 @@ class GeminiClient(QObject):
         else:
             ws = base
         return f"{ws}{GEMINI_WS_PATH}?key={self._api_key}"
+
+    def _connect_kwargs(self) -> dict:
+        if self._proxy_url:
+            return {"proxy": self._proxy_url}
+        # Disable implicit env/system proxy discovery when the app setting is
+        # empty, so direct connections stay direct.
+        return {"proxy": None}
 
     def start(self) -> Optional[int]:
         with self._state_lock:
@@ -322,6 +347,7 @@ class GeminiClient(QObject):
                 close_timeout=2.0,
                 ping_interval=20,
                 ping_timeout=20,
+                **self._connect_kwargs(),
             ) as ws:
                 if not self._is_active(session_id):
                     return

@@ -325,7 +325,7 @@ class HUDWindow(QWidget):
         ctrl = QHBoxLayout(self.control_bar)
         ctrl.setContentsMargins(0, 6, 0, 0)
         ctrl.setSpacing(8)
-        self.toggle_btn = QPushButton(tr("hud.pause"))
+        self.toggle_btn = QPushButton(tr("hud.start"))
         self.toggle_btn.setObjectName("primaryBtn")
         self.toggle_btn.setCursor(Qt.PointingHandCursor)
         self.toggle_btn.clicked.connect(self.toggle_requested.emit)

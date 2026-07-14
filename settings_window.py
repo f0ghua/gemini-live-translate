@@ -27,9 +27,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gemini_client import GEMINI_WS_PATH
+from audio import list_capture_devices
+from gemini_client import GEMINI_WS_PATH, normalize_proxy_url
 from i18n import tr
-from settings import DEFAULT_API_BASE, DEFAULT_GEMINI_MODEL, LANGUAGES, AppSettings
+from settings import (
+    DEFAULT_API_BASE,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_PROXY_URL,
+    LANGUAGES,
+    AppSettings,
+)
 from theme import (
     ACCENT,
     ACCENT_BRIGHT as ACCENT_HOVER,
@@ -216,7 +223,9 @@ def _build_ws_url(api_base: str, api_key: str) -> str:
     return f"{ws}{GEMINI_WS_PATH}?key={api_key}"
 
 
-async def _do_test_connection(api_key: str, api_base: str, model: str) -> tuple[bool, str]:
+async def _do_test_connection(
+    api_key: str, api_base: str, model: str, proxy_url: str
+) -> tuple[bool, str]:
     """Open a one-shot Gemini Live setup handshake and report whether it
     succeeded. Runs inside the worker thread's event loop."""
     url = _build_ws_url(api_base, api_key)
@@ -241,6 +250,7 @@ async def _do_test_connection(api_key: str, api_base: str, model: str) -> tuple[
         max_size=2 ** 22,
         open_timeout=8,
         close_timeout=2,
+        proxy=normalize_proxy_url(proxy_url) or None,
     ) as ws_conn:
         await ws_conn.send(json.dumps({"setup": setup}))
         try:
@@ -260,9 +270,11 @@ async def _do_test_connection(api_key: str, api_base: str, model: str) -> tuple[
         return True, "OK"
 
 
-def _run_test(api_key: str, api_base: str, model: str) -> tuple[bool, str]:
+def _run_test(
+    api_key: str, api_base: str, model: str, proxy_url: str
+) -> tuple[bool, str]:
     try:
-        return asyncio.run(_do_test_connection(api_key, api_base, model))
+        return asyncio.run(_do_test_connection(api_key, api_base, model, proxy_url))
     except websockets.InvalidStatusCode as e:
         return False, f"HTTP {e.status_code}"
     except Exception as e:
@@ -277,15 +289,17 @@ class _ConnectionTester(QObject):
     """
     result = Signal(bool, str)
 
-    def run(self, api_key: str, api_base: str, model: str) -> None:
+    def run(self, api_key: str, api_base: str, model: str, proxy_url: str) -> None:
         threading.Thread(
             target=self._worker,
-            args=(api_key, api_base, model),
+            args=(api_key, api_base, model, proxy_url),
             daemon=True,
         ).start()
 
-    def _worker(self, api_key: str, api_base: str, model: str) -> None:
-        ok, msg = _run_test(api_key, api_base, model)
+    def _worker(
+        self, api_key: str, api_base: str, model: str, proxy_url: str
+    ) -> None:
+        ok, msg = _run_test(api_key, api_base, model, proxy_url)
         self.result.emit(ok, msg)
 
 
@@ -345,6 +359,10 @@ class SettingsDialog(QDialog):
         self.api_base_edit.setPlaceholderText(DEFAULT_API_BASE)
         conn_form.addRow(tr("settings.api_base"), self.api_base_edit)
 
+        self.proxy_url_edit = QLineEdit(settings.proxy_url)
+        self.proxy_url_edit.setPlaceholderText("127.0.0.1:2802")
+        conn_form.addRow(tr("settings.proxy_url"), self.proxy_url_edit)
+
         self.lang_combo = QComboBox()
         for code, name in LANGUAGES:
             self.lang_combo.addItem(name, code)
@@ -373,7 +391,17 @@ class SettingsDialog(QDialog):
         self.source_combo = QComboBox()
         self.source_combo.addItem(tr("settings.source_system"), "system")
         self.source_combo.addItem(tr("settings.source_mic"), "mic")
-        idx = self.source_combo.findData(settings.audio_source)
+        for dev in self._capture_device_items():
+            label = f"{dev['name']} ({dev['index']})"
+            if dev["kind"] == "system":
+                label = f"{label} [Loopback]"
+            self.source_combo.addItem(label, f"device:{dev['index']}")
+        selected = (
+            f"device:{settings.audio_device_index}"
+            if settings.audio_device_index >= 0
+            else settings.audio_source
+        )
+        idx = self.source_combo.findData(selected)
         if idx >= 0:
             self.source_combo.setCurrentIndex(idx)
         audio_form.addRow(tr("settings.audio_source"), self.source_combo)
@@ -494,6 +522,12 @@ class SettingsDialog(QDialog):
         w.setLayout(h)
         return w
 
+    def _capture_device_items(self) -> list[dict]:
+        try:
+            return list_capture_devices()
+        except Exception:
+            return []
+
     def _toggle_key_visibility(self, checked: bool) -> None:
         self.api_key_edit.setEchoMode(QLineEdit.Normal if checked else QLineEdit.Password)
         self.show_key_btn.setText(tr("settings.hide") if checked else tr("settings.show"))
@@ -507,11 +541,12 @@ class SettingsDialog(QDialog):
             return
         api_base = self.api_base_edit.text().strip() or DEFAULT_API_BASE
         model = self.model_edit.text().strip() or DEFAULT_GEMINI_MODEL
+        proxy_url = self.proxy_url_edit.text().strip() or DEFAULT_PROXY_URL
         self.test_btn.setEnabled(False)
         self.test_btn.setText(tr("settings.testing"))
         self.test_result_label.setText("")
         self.test_result_label.setObjectName("testResultOk")
-        self._tester.run(api_key, api_base, model)
+        self._tester.run(api_key, api_base, model, proxy_url)
 
     def _on_test_result(self, ok: bool, message: str) -> None:
         self.test_btn.setEnabled(True)
@@ -533,8 +568,18 @@ class SettingsDialog(QDialog):
         settings.api_key = self.api_key_edit.text().strip()
         # Empty api_base → use official Google endpoint (handled by client).
         settings.api_base = self.api_base_edit.text().strip() or DEFAULT_API_BASE
+        settings.proxy_url = self.proxy_url_edit.text().strip()
         settings.target_language = self.lang_combo.currentData() or "zh-CN"
-        settings.audio_source = self.source_combo.currentData() or "system"
+        selected_source = self.source_combo.currentData() or "system"
+        if isinstance(selected_source, str) and selected_source.startswith("device:"):
+            try:
+                settings.audio_device_index = int(selected_source.split(":", 1)[1])
+            except ValueError:
+                settings.audio_device_index = -1
+            settings.audio_source = "device" if settings.audio_device_index >= 0 else "system"
+        else:
+            settings.audio_source = selected_source
+            settings.audio_device_index = -1
         settings.font_size = self.font_slider.value()
         settings.bg_opacity = self.opacity_slider.value() / 100.0
         settings.playback_volume = self.volume_slider.value() / 100.0

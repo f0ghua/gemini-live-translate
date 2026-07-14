@@ -54,13 +54,54 @@ def terminate_pyaudio() -> None:
             _pyaudio = None
 
 
+def list_capture_devices() -> list[dict]:
+    """Return selectable input and loopback capture devices."""
+    pa = _get_pyaudio()
+    devices: list[dict] = []
+    for i in range(pa.get_device_count()):
+        try:
+            dev = pa.get_device_info_by_index(i)
+        except Exception:
+            continue
+        max_inputs = int(dev.get("maxInputChannels") or 0)
+        is_loopback = bool(dev.get("isLoopbackDevice"))
+        if max_inputs <= 0:
+            continue
+        kind = "system" if is_loopback else "mic"
+        devices.append(
+            {
+                "index": int(dev["index"]),
+                "name": str(dev.get("name") or f"Device {i}"),
+                "kind": kind,
+                "channels": max_inputs,
+                "sample_rate": int(float(dev.get("defaultSampleRate") or 0)),
+                "is_loopback": is_loopback,
+            }
+        )
+    return devices
+
+
+def _device_by_index(pa: pyaudio.PyAudio, device_index: int) -> dict:
+    try:
+        dev = pa.get_device_info_by_index(device_index)
+    except Exception as e:
+        raise RuntimeError(f"Audio device index {device_index} is not available.") from e
+    if int(dev.get("maxInputChannels") or 0) <= 0:
+        raise RuntimeError(f"Audio device index {device_index} has no input channels.")
+    return dev
+
+
 class AudioCapture:
     """Capture audio from microphone or system output (WASAPI loopback)."""
 
     def __init__(
-        self, source: str, on_pcm16_chunk: Callable[[bytes], None]
+        self,
+        source: str,
+        on_pcm16_chunk: Callable[[bytes], None],
+        device_index: Optional[int] = None,
     ) -> None:
         self.source = source  # "mic" | "system"
+        self.device_index = device_index
         self.on_chunk = on_pcm16_chunk
         self.downsampler = PCM16Downsampler(target_rate=GEMINI_INPUT_RATE)
         self.chunker = PCM16Chunker(chunk_size=CHUNK_SIZE, on_chunk=on_pcm16_chunk)
@@ -79,7 +120,12 @@ class AudioCapture:
             return
         pa = _get_pyaudio()
 
-        if self.source == "system":
+        if self.device_index is not None:
+            dev = _device_by_index(pa, self.device_index)
+            device_idx = dev["index"]
+            samplerate = int(dev["defaultSampleRate"])
+            channels = max(1, int(dev["maxInputChannels"]))
+        elif self.source == "system":
             # WASAPI loopback device (captures the default output endpoint's mix)
             try:
                 dev = pa.get_default_wasapi_loopback()

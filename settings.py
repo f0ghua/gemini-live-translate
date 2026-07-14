@@ -32,14 +32,17 @@ LANGUAGES = [
 
 DEFAULT_API_BASE = "https://generativelanguage.googleapis.com"
 DEFAULT_GEMINI_MODEL = "models/gemini-3.5-live-translate-preview"
+DEFAULT_PROXY_URL = ""
 
 
 @dataclass
 class AppSettings:
     api_key: str = ""
     api_base: str = DEFAULT_API_BASE  # override for OpenAI-compatible proxies
+    proxy_url: str = DEFAULT_PROXY_URL  # HTTP/SOCKS proxy for direct Gemini access
     target_language: str = "zh-CN"
     audio_source: str = "system"  # "mic" | "system"
+    audio_device_index: int = -1  # -1 means use the default source device
     font_size: int = 16
     bg_opacity: float = 0.6  # 0..1
     echo_target_language: bool = False
@@ -92,14 +95,16 @@ class AppSettings:
         valid_languages = {code for code, _ in LANGUAGES}
         self.api_key = self._coerce_str(self.api_key)
         self.api_base = self._coerce_str(self.api_base, DEFAULT_API_BASE).strip() or DEFAULT_API_BASE
+        self.proxy_url = self._coerce_str(self.proxy_url, DEFAULT_PROXY_URL).strip()
         self.target_language = self._coerce_str(self.target_language, "zh-CN")
         if self.target_language == "zh":
             self.target_language = "zh-CN"
         if self.target_language not in valid_languages:
             self.target_language = "zh-CN"
         self.audio_source = self._coerce_str(self.audio_source, "system")
-        if self.audio_source not in {"mic", "system"}:
+        if self.audio_source not in {"mic", "system", "device"}:
             self.audio_source = "system"
+        self.audio_device_index = self._coerce_int(self.audio_device_index, -1, -1, 9999)
         self.font_size = self._coerce_int(self.font_size, 16, 14, 60)
         self.bg_opacity = self._coerce_float(self.bg_opacity, 0.6, 0.2, 0.95)
         self.echo_target_language = self._coerce_bool(self.echo_target_language, False)

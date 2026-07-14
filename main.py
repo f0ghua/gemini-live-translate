@@ -115,6 +115,7 @@ class LiveBuddyApp(QObject):
         self.player: Optional[AudioPlayer] = None
         self.is_running = False
         self._active_client_session_id: Optional[int] = None
+        self._start_retry_pending = False
 
         self.hud = HUDWindow(self.settings)
         self.hud.toggle_requested.connect(self.toggle)
@@ -168,22 +169,38 @@ class LiveBuddyApp(QObject):
             echo_target_language=self.settings.echo_target_language,
             api_base=self.settings.api_base,
             model=self.settings.gemini_model,
+            proxy_url=self.settings.proxy_url,
         )
         session_id = self.client.start()
         if session_id is None:
+            last_error = self.client.last_start_error()
+            if last_error == "Previous Gemini session is still stopping":
+                if not self._start_retry_pending:
+                    self._start_retry_pending = True
+                    self.hud.set_status(last_error, KIND_CONNECTING)
+                    QTimer.singleShot(700, self._retry_start_after_stop)
+                self._stop_audio_player()
+                self.hud.set_running_state(False)
+                return
             self._stop_audio_player()
             self._active_client_session_id = None
             self.is_running = False
             self.hud.set_running_state(False)
             self.hud.set_status(
-                self.client.last_start_error() or tr("status.start_failed"),
+                last_error or tr("status.start_failed"),
                 KIND_ERROR,
             )
             return
+        self._start_retry_pending = False
         self._active_client_session_id = session_id
         self.is_running = True
         self.hud.set_running_state(True)
         self.hud.set_status(tr("status.connecting"), KIND_CONNECTING)
+
+    def _retry_start_after_stop(self) -> None:
+        self._start_retry_pending = False
+        if not self.is_running:
+            self.start()
 
     def stop(self) -> None:
         if not self.is_running:
@@ -212,8 +229,10 @@ class LiveBuddyApp(QObject):
             dlg = SettingsDialog(self.settings, parent=self.hud)
             if dlg.exec() == SettingsDialog.Accepted:
                 prev_source = self.settings.audio_source
+                prev_device = self.settings.audio_device_index
                 prev_key = self.settings.api_key
                 prev_base = self.settings.api_base
+                prev_proxy = self.settings.proxy_url
                 prev_lang = self.settings.target_language
                 prev_echo = self.settings.echo_target_language
                 prev_prompt = self.settings.system_prompt
@@ -226,8 +245,10 @@ class LiveBuddyApp(QObject):
                 # restart if anything that affects the live session changed
                 needs_restart = self.is_running and (
                     prev_source != self.settings.audio_source
+                    or prev_device != self.settings.audio_device_index
                     or prev_key != self.settings.api_key
                     or prev_base != self.settings.api_base
+                    or prev_proxy != self.settings.proxy_url
                     or prev_lang != self.settings.target_language
                     or prev_echo != self.settings.echo_target_language
                     or prev_prompt != self.settings.system_prompt
@@ -288,6 +309,11 @@ class LiveBuddyApp(QObject):
                     source=self.settings.audio_source,
                     on_pcm16_chunk=lambda chunk, sid=session_id: self.client.send_audio(
                         chunk, sid
+                    ),
+                    device_index=(
+                        self.settings.audio_device_index
+                        if self.settings.audio_device_index >= 0
+                        else None
                     ),
                 )
                 self.capture.start()
